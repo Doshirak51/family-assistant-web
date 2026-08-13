@@ -1,5 +1,5 @@
 // These values are safe to use in a browser. Do not put a Supabase Secret key here.
 window.FAMILY_ASSISTANT_CONFIG = {
-  supabaseUrl: "",
+  supabaseUrl: "https://nwvzrvmdwmuivcdbpmyd.supabase.co",
   supabaseAnonKey: "sb_publishable_4VzNeZ4COh7fI7v5tNvpFg_u4agoGbZ"
 };
