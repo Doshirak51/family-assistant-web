@@ -42,40 +42,80 @@ function showLogin(message = "") {
   section.append(
     el("div", "logo-mark", "♥"),
     el("h1", "", "Ваш общий дом для планов и денег"),
-    el("p", "lead", "Без e‑mail и паролей. Доступ останется на этом устройстве, а партнёра вы добавите личной ссылкой.")
+    el("p", "lead", "Вход по e‑mail и паролю. Никаких писем и дополнительной настройки почты.")
   );
-  const form = el("form", "auth-card");
-  const label = el("label", "", "Как вас называть?");
-  const name = el("input", "input");
-  name.autocomplete = "name";
-  name.placeholder = "Например, Дарина";
-  name.maxLength = 80;
-  label.append(name);
-  const alert = el("p", "alert hidden");
-  const submit = button("Открыть Family Assistant");
-  submit.type = "submit";
-  form.append(label);
-  if (message) form.append(el("p", "alert", message));
-  form.append(alert, submit, el("p", "auth-note", "Не очищайте данные браузера: так приложение узнаёт вас на этом устройстве."));
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    submit.disabled = true;
-    alert.classList.add("hidden");
-    const { data, error } = await sb.auth.signInAnonymously({
-      options: { data: { full_name: name.value.trim() || "Участник семьи" } }
-    });
-    if (error) {
-      submit.disabled = false;
-      alert.textContent = error.message.includes("Anonymous")
-        ? "Нужно один раз включить анонимный вход в Supabase: Authentication → Configuration → Allow anonymous sign-ins."
-        : errorText(error);
-      alert.classList.remove("hidden");
-      return;
+  const card = el("div", "auth-card");
+  let mode = "signin";
+
+  const drawForm = () => {
+    card.replaceChildren();
+    const switcher = el("div", "auth-switch");
+    const signInMode = button("Войти", `auth-mode ${mode === "signin" ? "active" : ""}`, () => { mode = "signin"; drawForm(); });
+    const signUpMode = button("Создать доступ", `auth-mode ${mode === "signup" ? "active" : ""}`, () => { mode = "signup"; drawForm(); });
+    switcher.append(signInMode, signUpMode);
+
+    const form = el("form", "form");
+    let name;
+    if (mode === "signup") {
+      const nameLabel = el("label", "", "Как вас называть?");
+      name = el("input", "input");
+      name.autocomplete = "name";
+      name.placeholder = "Например, Дарина";
+      name.maxLength = 80;
+      name.required = true;
+      nameLabel.append(name);
+      form.append(nameLabel);
     }
-    session = data.session;
-    await boot();
-  });
-  section.append(form);
+    const emailLabel = el("label", "", "Ваш e‑mail");
+    const email = el("input", "input");
+    email.type = "email";
+    email.autocomplete = "email";
+    email.placeholder = "name@example.com";
+    email.required = true;
+    emailLabel.append(email);
+    const passwordLabel = el("label", "", "Пароль");
+    const password = el("input", "input");
+    password.type = "password";
+    password.autocomplete = mode === "signup" ? "new-password" : "current-password";
+    password.placeholder = "Минимум 8 символов";
+    password.minLength = 8;
+    password.required = true;
+    passwordLabel.append(password);
+    const alert = el("p", "alert hidden");
+    const submit = button(mode === "signup" ? "Создать доступ" : "Войти");
+    submit.type = "submit";
+    form.append(emailLabel, passwordLabel, alert, submit);
+    if (message) form.prepend(el("p", "alert", message));
+    form.append(el("p", "auth-note", mode === "signup" ? "Письмо не придёт: пароль нужен, чтобы войти с любого устройства." : "Первый раз на сайте? Нажмите «Создать доступ»."));
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      submit.disabled = true;
+      alert.classList.add("hidden");
+      const credentials = { email: email.value.trim(), password: password.value };
+      const result = mode === "signup"
+        ? await sb.auth.signUp({ ...credentials, options: { data: { full_name: name.value.trim() } } })
+        : await sb.auth.signInWithPassword(credentials);
+      if (result.error) {
+        submit.disabled = false;
+        alert.textContent = result.error.message.includes("Email signups are disabled")
+          ? "В Supabase включите Email в Authentication → Configuration → Sign In / Providers."
+          : errorText(result.error);
+        alert.classList.remove("hidden");
+        return;
+      }
+      if (!result.data.session) {
+        submit.disabled = false;
+        alert.textContent = "В Supabase отключите Confirm email: Authentication → Configuration → Sign In / Providers → Email.";
+        alert.classList.remove("hidden");
+        return;
+      }
+      session = result.data.session;
+      await boot();
+    });
+    card.append(switcher, form);
+  };
+  drawForm();
+  section.append(card);
   app.append(section);
 }
 function showSetup() {
@@ -117,5 +157,5 @@ function openShopping(lists){const d=dialog("Добавить покупку");c
 async function toggleShop(id,done){const {error}=await sb.from("family_web_shopping_items").update({completed_at:done?new Date().toISOString():null}).eq("id",id);if(error){alert(errorText(error));await render()}}
 async function openInvite(){const d=dialog("Пригласить партнёра");const p=el("p","", "Ссылка одноразовая и действует 7 дней. Отправьте её только второму участнику семьи.");d.append(p);const load=el("p","loading-line show","Создаём ссылку…");d.append(load);d.showModal();const {data,error}=await sb.rpc("family_web_create_invite");load.classList.remove("show");if(error){d.append(el("p","alert",errorText(error)));return}const input=el("input","input");input.readOnly=true;input.value=`${location.origin}${location.pathname}?invite=${data}`;const copy=button("Скопировать ссылку","primary",async()=>{await navigator.clipboard.writeText(input.value);copy.textContent="Скопировано ✓"});d.append(input,copy)}
 async function boot(){clear();app.append(el("section","state-card","Загружаем данные…"));const have=await loadHousehold();if(!have)return showSetup();await render();}
-async function start(){if(!cfg.supabaseUrl||!cfg.supabaseAnonKey)return showConfig();sb=createClient(cfg.supabaseUrl,cfg.supabaseAnonKey);const result=await sb.auth.getSession();session=result.data.session;if(!session)return showLogin();await boot();sb.auth.onAuthStateChange(async(_event,newSession)=>{session=newSession;if(session)await boot();else showLogin()});}
+async function start(){if(!cfg.supabaseUrl||!cfg.supabaseAnonKey)return showConfig();sb=createClient(cfg.supabaseUrl,cfg.supabaseAnonKey);const result=await sb.auth.getSession();session=result.data.session;if(session?.user?.is_anonymous){await sb.auth.signOut();session=null;}sb.auth.onAuthStateChange(async(_event,newSession)=>{session=newSession;if(session)await boot();else showLogin()});if(!session)return showLogin();await boot();}
 start().catch((error)=>showLogin(errorText(error)));
