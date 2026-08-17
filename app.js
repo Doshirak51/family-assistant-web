@@ -37,10 +37,45 @@ function showConfig() {
   const panel = el("div", "auth-card"); panel.append(el("p", "", "Откройте файл config.js и добавьте Project URL и publishable/anon key. Secret key туда не вставляйте.")); card.append(panel); app.append(card);
 }
 function showLogin(message = "") {
-  clear(); const section = el("section", "auth"); section.append(el("div", "logo-mark", "♥"), el("h1", "", "Ваш общий дом для планов и денег"), el("p", "lead", "Войдите по e‑mail — без паролей. Доступ появится только у участников вашей семьи."));
-  const form = el("form", "auth-card"); const label = el("label", "", "Ваш e‑mail"); const email = el("input", "input"); email.type = "email"; email.autocomplete = "email"; email.placeholder = "name@example.com"; email.required = true; label.append(email); form.append(label);
-  if (message) form.append(el("p", "alert success", message)); const alert = el("p", "alert hidden"); form.append(alert); const submit = button("Получить ссылку для входа"); form.append(submit, el("p", "auth-note", "Мы отправим ссылку на этот адрес. Пароль не нужен."));
-  form.addEventListener("submit", async (event) => { event.preventDefault(); submit.disabled = true; alert.classList.add("hidden"); const { error } = await sb.auth.signInWithOtp({ email: email.value.trim(), options: { emailRedirectTo: window.location.origin + window.location.pathname } }); submit.disabled = false; if (error) { alert.textContent = errorText(error); alert.classList.remove("hidden"); } else { submit.textContent = "Ссылка отправлена ✓"; } }); section.append(form); app.append(section);
+  clear();
+  const section = el("section", "auth");
+  section.append(
+    el("div", "logo-mark", "♥"),
+    el("h1", "", "Ваш общий дом для планов и денег"),
+    el("p", "lead", "Без e‑mail и паролей. Доступ останется на этом устройстве, а партнёра вы добавите личной ссылкой.")
+  );
+  const form = el("form", "auth-card");
+  const label = el("label", "", "Как вас называть?");
+  const name = el("input", "input");
+  name.autocomplete = "name";
+  name.placeholder = "Например, Дарина";
+  name.maxLength = 80;
+  label.append(name);
+  const alert = el("p", "alert hidden");
+  const submit = button("Открыть Family Assistant");
+  form.append(label);
+  if (message) form.append(el("p", "alert", message));
+  form.append(alert, submit, el("p", "auth-note", "Не очищайте данные браузера: так приложение узнаёт вас на этом устройстве."));
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    submit.disabled = true;
+    alert.classList.add("hidden");
+    const { data, error } = await sb.auth.signInAnonymously({
+      options: { data: { full_name: name.value.trim() || "Участник семьи" } }
+    });
+    if (error) {
+      submit.disabled = false;
+      alert.textContent = error.message.includes("Anonymous")
+        ? "Нужно один раз включить анонимный вход в Supabase: Authentication → Configuration → Allow anonymous sign-ins."
+        : errorText(error);
+      alert.classList.remove("hidden");
+      return;
+    }
+    session = data.session;
+    await boot();
+  });
+  section.append(form);
+  app.append(section);
 }
 function showSetup() {
   clear(); const section = el("section", "auth"); const invite = new URLSearchParams(location.search).get("invite"); section.append(el("div", "logo-mark", "♥"), el("h1", "", invite ? "Вас ждут в семье" : "Создадим ваше пространство"), el("p", "lead", invite ? "Подтвердите вход — и вы присоединитесь к общему дому." : "Один раз задайте название. Затем пригласите Кристину личной ссылкой."));
